@@ -48,8 +48,7 @@ def load_ny_data():
     # Drop rows missing crucial values
     df = df.dropna(subset=['LATITUDE', 'LONGITUDE', 'PRICE', 'PROPERTYSQFT'])
     
-    # CRITICAL FIX: Ensure size and price are strictly positive numbers (> 0)
-    # This prevents Plotly from crashing on zero or negative size markers
+    # Ensure size and price are strictly positive numbers (> 0)
     df = df[(df['PRICE'] > 0) & (df['PROPERTYSQFT'] > 10)]
     
     # Outlier Removal: Cut off top 2% extreme luxury properties to preserve chart scales
@@ -81,14 +80,13 @@ try:
     if selected_locality != "All New York":
         working_df = working_df[working_df['SUBLOCALITY'] == selected_locality]
 
-    # Control 3: Dynamic Price Range Slider
+    # Control 3: Dynamic Price Range Slider with safety bounds
     if not working_df.empty:
         min_price = int(working_df['PRICE'].min())
         max_price = int(working_df['PRICE'].max())
     else:
         min_price, max_price = 0, 10000000
 
-    # Safety check to prevent slider crash if min == max
     if min_price == max_price:
         max_price += 1
 
@@ -109,8 +107,8 @@ try:
     st.markdown(f"**Target Area:** {selected_locality} | **Analyzing:** {len(filtered_df)} properties")
     st.markdown("---")
 
-    col1, col2, col3 = st.columns(3)
     if not filtered_df.empty:
+        col1, col2, col3 = st.columns(3)
         avg_price = filtered_df['PRICE'].mean()
         avg_size = filtered_df['PROPERTYSQFT'].mean()
         avg_cost_sqft = filtered_df['PRICE_PER_SQFT'].mean()
@@ -165,7 +163,8 @@ try:
             )
             st.plotly_chart(fig_corr, use_container_width=True)
     else:
-        st.warning("No properties match your current filter criteria settings.")
+        # SAFETY PROTECTION: Displays clean info state instead of crashing with red code lines
+        st.info("⚠️ No properties match your current filter criteria settings. Please broaden your budget range or select additional property types in the control panel.")
 
 except FileNotFoundError:
     st.error("Data Error: The critical data file 'NY-House-Dataset.csv' was not discovered in the root environment.")
