@@ -35,8 +35,8 @@ st.markdown("""
 # =============================================================================
 # DATA PIPELINE (Step 1: Loading & Cleaning Real-World Dataset)
 # =============================================================================
-@st.cache_data
-def load_ny_data():
+try:
+    # Read the dataset file directly (no caching to prevent frozen key errors)
     df = pd.read_csv("NY-House-Dataset.csv")
     
     # Force everything to be numeric, broken items turn into NaN
@@ -48,18 +48,15 @@ def load_ny_data():
     # Drop rows missing crucial values
     df = df.dropna(subset=['LATITUDE', 'LONGITUDE', 'PRICE', 'PROPERTYSQFT'])
     
-    # Ensure size and price are strictly positive numbers (> 0)
+    # Filter rows with realistic positive metrics
     df = df[(df['PRICE'] > 0) & (df['PROPERTYSQFT'] > 10)]
     
     # Outlier Removal: Cut off top 2% extreme luxury properties to preserve chart scales
     q_high = df['PRICE'].quantile(0.98)
     df = df[df['PRICE'] <= q_high]
     
+    # GUARANTEED column creation before any active filter processes
     df['PRICE_PER_SQFT'] = df['PRICE'] / df['PROPERTYSQFT']
-    return df
-
-try:
-    df = load_ny_data()
 
     # =============================================================================
     # INTERACTIVE CONTROLS (Sidebar Configuration)
@@ -125,7 +122,7 @@ try:
         chart_col1, chart_col2 = st.columns(2)
 
         with chart_col1:
-            # Chart 1: Map (CRITICAL FIX: Changed mapbox_style to 'open-street-map' for native 0-token rendering)
+            # Chart 1: Native Map
             st.subheader("📍 Spatial Price Distribution Map")
             fig_map = px.scatter_mapbox(
                 filtered_df, lat="LATITUDE", lon="LONGITUDE", color="PRICE",
@@ -168,3 +165,5 @@ try:
 
 except FileNotFoundError:
     st.error("Data Error: The critical data file 'NY-House-Dataset.csv' was not discovered in the root environment.")
+except Exception as e:
+    st.error(f"An unexpected systematic rendering error occurred: {e}")
