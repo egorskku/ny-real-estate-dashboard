@@ -125,17 +125,16 @@ try:
         chart_col1, chart_col2 = st.columns(2)
 
         with chart_col1:
-            # Chart 1: Map (CRITICAL FIX: Removed size parameter to completely bypass Mapbox image rendering error)
+            # Chart 1: Map (CRITICAL FIX: Changed mapbox_style to 'open-street-map' for native 0-token rendering)
             st.subheader("📍 Spatial Price Distribution Map")
             fig_map = px.scatter_mapbox(
                 filtered_df, lat="LATITUDE", lon="LONGITUDE", color="PRICE",
                 color_continuous_scale=px.colors.sequential.Electric, zoom=10, hover_name="LOCALITY",
                 hover_data=["PRICE", "PROPERTYSQFT"]
             )
-            # Enforce solid point scale size to ensure cross-platform compatibility
             fig_map.update_traces(marker=dict(size=8))
             fig_map.update_layout(
-                mapbox_style="carto-darkmatter", margin={"r":0,"t":0,"l":0,"b":0}, 
+                mapbox_style="open-street-map", margin={"r":0,"t":0,"l":0,"b":0}, 
                 paper_bgcolor="#161B22", plot_bgcolor="#161B22", font_color="#FFFFFF"
             )
             st.plotly_chart(fig_map, use_container_width=True)
