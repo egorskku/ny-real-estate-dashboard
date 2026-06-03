@@ -41,6 +41,12 @@ def load_ny_data():
     # Read the dataset file (Must be located in the same directory as app.py)
     df = pd.read_csv("NY-House-Dataset.csv")
     
+    # CRITICAL FIX: Force coordinates to be numeric and drop any rows with failed parsing
+    df['LATITUDE'] = pd.to_numeric(df['LATITUDE'], errors='coerce')
+    df['LONGITUDE'] = pd.to_numeric(df['LONGITUDE'], errors='coerce')
+    df['PRICE'] = pd.to_numeric(df['PRICE'], errors='coerce')
+    df['PROPERTYSQFT'] = pd.to_numeric(df['PROPERTYSQFT'], errors='coerce')
+    
     # Drop rows missing crucial visual/numerical elements
     df = df.dropna(subset=['LATITUDE', 'LONGITUDE', 'PRICE', 'PROPERTYSQFT'])
     df = df[(df['PRICE'] > 0) & (df['PROPERTYSQFT'] > 0)]
@@ -115,12 +121,12 @@ try:
         chart_col1, chart_col2 = st.columns(2)
 
         with chart_col1:
-            # Chart 1: Spatial Geospatial Distribution Map
+            # Chart 1: Spatial Geospatial Distribution Map (FIXED HOVER DATA Syntax)
             st.subheader("📍 Spatial Price Distribution Map")
             fig_map = px.scatter_mapbox(
                 filtered_df, lat="LATITUDE", lon="LONGITUDE", color="PRICE", size="PROPERTYSQFT",
                 color_continuous_scale=px.colors.sequential.Electric, zoom=10, hover_name="LOCALITY",
-                hover_data={"PRICE": ":$,.0f", "PROPERTYSQFT": ":,f", "LATITUDE": False, "LONGITUDE": False}
+                hover_data=["PRICE", "PROPERTYSQFT"]
             )
             fig_map.update_layout(
                 mapbox_style="carto-darkmatter", margin={"r":0,"t":0,"l":0,"b":0}, 
