@@ -33,36 +33,37 @@ st.markdown("""
     </style>
 """, unsafe_with_html=True)
 
-# =============================================================================
-# SAFE DATA LOADING (Linear Execution)
-# =============================================================================
+# PRE-INITIALIZE VARIABLES TO PREVENT ANY NAME_ERRORS
+df = pd.DataFrame()
+working_df = pd.DataFrame()
+filtered_df = pd.DataFrame()
+
 filename = "NY-House-Dataset.csv"
 
-if not os.path.exists(filename):
-    st.error(f"Data Error: The file '{filename}' was not found in the root directory. Please check your GitHub repository.")
+# =============================================================================
+# SAFE DATA LOADING
+# =============================================================================
+if os.path.exists(filename):
+    raw_df = pd.read_csv(filename)
+    
+    # Force numeric conversion safely
+    raw_df['LATITUDE'] = pd.to_numeric(raw_df['LATITUDE'], errors='coerce')
+    raw_df['LONGITUDE'] = pd.to_numeric(raw_df['LONGITUDE'], errors='coerce')
+    raw_df['PRICE'] = pd.to_numeric(raw_df['PRICE'], errors='coerce')
+    raw_df['PROPERTYSQFT'] = pd.to_numeric(raw_df['PROPERTYSQFT'], errors='coerce')
+    
+    # Clean logic
+    df = raw_df.dropna(subset=['LATITUDE', 'LONGITUDE', 'PRICE', 'PROPERTYSQFT']).copy()
+    df = df[(df['PRICE'] > 0) & (df['PROPERTYSQFT'] > 10)]
+    
+    # Anti-outlier
+    if not df.empty:
+        q_high = df['PRICE'].quantile(0.98)
+        df = df[df['PRICE'] <= q_high].copy()
+        df['PRICE_PER_SQFT'] = df['PRICE'] / df['PROPERTYSQFT']
+else:
+    st.error(f"Critical Error: Source dataset file '{filename}' was not found.")
     st.stop()
-
-# Read the dataset file safely
-df = pd.read_csv(filename)
-
-# Force everything to be numeric, broken items turn into NaN
-df['LATITUDE'] = pd.to_numeric(df['LATITUDE'], errors='coerce')
-df['LONGITUDE'] = pd.to_numeric(df['LONGITUDE'], errors='coerce')
-df['PRICE'] = pd.to_numeric(df['PRICE'], errors='coerce')
-df['PROPERTYSQFT'] = pd.to_numeric(df['PROPERTYSQFT'], errors='coerce')
-
-# Drop rows missing crucial values
-df = df.dropna(subset=['LATITUDE', 'LONGITUDE', 'PRICE', 'PROPERTYSQFT'])
-
-# Filter rows with realistic positive metrics
-df = df[(df['PRICE'] > 0) & (df['PROPERTYSQFT'] > 10)]
-
-# Outlier Removal: Cut off top 2% extreme luxury properties to preserve chart scales
-q_high = df['PRICE'].quantile(0.98)
-df = df[df['PRICE'] <= q_high]
-
-# Calculate Price Per Sq Ft
-df['PRICE_PER_SQFT'] = df['PRICE'] / df['PROPERTYSQFT']
 
 # =============================================================================
 # INTERACTIVE CONTROLS (Sidebar Configuration)
@@ -70,38 +71,41 @@ df['PRICE_PER_SQFT'] = df['PRICE'] / df['PROPERTYSQFT']
 st.sidebar.title("🎛️ NY CONTROL PANEL")
 st.sidebar.markdown("---")
 
-# Control 1: Neighborhood Filter
-available_localities = sorted(df['SUBLOCALITY'].dropna().unique())
-selected_locality = st.sidebar.selectbox("Select Neighborhood / Borough:", ["All New York"] + list(available_localities))
+if not df.empty:
+    # 1. Locality Filter
+    available_localities = sorted(df['SUBLOCALITY'].dropna().unique())
+    selected_locality = st.sidebar.selectbox("Select Neighborhood / Borough:", ["All New York"] + list(available_localities))
 
-# Control 2: Property Structure Types Filter
-property_types = sorted(df['TYPE'].unique())
-selected_types = st.sidebar.multiselect("Property Type:", property_types, default=property_types)
+    # 2. Type Filter
+    property_types = sorted(df['TYPE'].unique())
+    selected_types = st.sidebar.multiselect("Property Type:", property_types, default=property_types)
 
-# Base Filtering Layer
-working_df = df[df['TYPE'].isin(selected_types)]
-if selected_locality != "All New York":
-    working_df = working_df[working_df['SUBLOCALITY'] == selected_locality]
+    # Apply structural filtration
+    working_df = df[df['TYPE'].isin(selected_types)].copy()
+    if selected_locality != "All New York":
+        working_df = working_df[working_df['SUBLOCALITY'] == selected_locality].copy()
 
-# Control 3: Dynamic Price Range Slider with safe fallbacks
-if not working_df.empty:
-    min_price = int(working_df['PRICE'].min())
-    max_price = int(working_df['PRICE'].max())
+    # 3. Dynamic Price Slider Setup
+    if not working_df.empty:
+        min_price = int(working_df['PRICE'].min())
+        max_price = int(working_df['PRICE'].max())
+    else:
+        min_price, max_price = 0, 10000000
+
+    if min_price == max_price:
+        max_price += 1
+
+    selected_budget = st.sidebar.slider(
+        "Set Purchase Budget Range ($):", 
+        min_value=min_price, 
+        max_value=max_price, 
+        value=(min_price, max_price)
+    )
+
+    # Final safe definition
+    filtered_df = working_df[(working_df['PRICE'] >= selected_budget[0]) & (working_df['PRICE'] <= selected_budget[1])].copy()
 else:
-    min_price, max_price = 0, 10000000
-
-if min_price == max_price:
-    max_price += 1
-
-selected_budget = st.sidebar.slider(
-    "Set Purchase Budget Range ($):", 
-    min_value=min_price, 
-    max_value=max_price, 
-    value=(min_price, max_price)
-)
-
-# Final Filtered DataFrame for Plots
-filtered_df = working_df[(working_df['PRICE'] >= selected_budget[0]) & (working_df['PRICE'] <= selected_budget[1])]
+    selected_locality = "All New York"
 
 # =============================================================================
 # MAIN MONITOR & SUMMARY METRICS
@@ -122,13 +126,9 @@ if not filtered_df.empty:
 
     st.markdown("---")
     
-    # =============================================================================
-    # DASHBOARD VISUALIZATIONS (3 Core Interactive Charts)
-    # =============================================================================
     chart_col1, chart_col2 = st.columns(2)
 
     with chart_col1:
-        # Chart 1: Map
         st.subheader("📍 Spatial Price Distribution Map")
         fig_map = px.scatter_mapbox(
             filtered_df, lat="LATITUDE", lon="LONGITUDE", color="PRICE",
@@ -142,7 +142,6 @@ if not filtered_df.empty:
         )
         st.plotly_chart(fig_map, use_container_width=True)
 
-        # Chart 2: Box Plot
         st.subheader("📊 Price Distribution by Property Type")
         fig_box = px.box(
             filtered_df, x="TYPE", y="PRICE", color="TYPE", 
@@ -155,7 +154,6 @@ if not filtered_df.empty:
         st.plotly_chart(fig_box, use_container_width=True)
 
     with chart_col2:
-        # Chart 3: Scatter Correlation Plot
         st.subheader("📉 Size vs Market Price Correlation")
         fig_corr = px.scatter(
             filtered_df, x="PROPERTYSQFT", y="PRICE", color="PRICE_PER_SQFT", 
