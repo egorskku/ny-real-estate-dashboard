@@ -7,7 +7,6 @@ import plotly.express as px
 # =============================================================================
 st.set_page_config(page_title="NY Real Estate Hub", layout="wide")
 
-# Custom CSS to apply dark mode and vibrant neon green styling
 st.markdown("""
     <style>
     .stApp { 
@@ -38,24 +37,25 @@ st.markdown("""
 # =============================================================================
 @st.cache_data
 def load_ny_data():
-    # Read the dataset file (Must be located in the same directory as app.py)
     df = pd.read_csv("NY-House-Dataset.csv")
     
-    # CRITICAL FIX: Force coordinates to be numeric and drop any rows with failed parsing
+    # Force everything to be numeric, broken items turn into NaN
     df['LATITUDE'] = pd.to_numeric(df['LATITUDE'], errors='coerce')
     df['LONGITUDE'] = pd.to_numeric(df['LONGITUDE'], errors='coerce')
     df['PRICE'] = pd.to_numeric(df['PRICE'], errors='coerce')
     df['PROPERTYSQFT'] = pd.to_numeric(df['PROPERTYSQFT'], errors='coerce')
     
-    # Drop rows missing crucial visual/numerical elements
+    # Drop rows missing crucial values
     df = df.dropna(subset=['LATITUDE', 'LONGITUDE', 'PRICE', 'PROPERTYSQFT'])
-    df = df[(df['PRICE'] > 0) & (df['PROPERTYSQFT'] > 0)]
+    
+    # CRITICAL FIX: Ensure size and price are strictly positive numbers (> 0)
+    # This prevents Plotly from crashing on zero or negative size markers
+    df = df[(df['PRICE'] > 0) & (df['PROPERTYSQFT'] > 10)]
     
     # Outlier Removal: Cut off top 2% extreme luxury properties to preserve chart scales
     q_high = df['PRICE'].quantile(0.98)
     df = df[df['PRICE'] <= q_high]
     
-    # Engineer a new metric for deep production evaluation
     df['PRICE_PER_SQFT'] = df['PRICE'] / df['PROPERTYSQFT']
     return df
 
@@ -68,11 +68,11 @@ try:
     st.sidebar.title("🎛️ NY CONTROL PANEL")
     st.sidebar.markdown("---")
 
-    # Control 1: Neighborhood / Borough Dropdown Filter
+    # Control 1: Neighborhood Filter
     available_localities = sorted(df['SUBLOCALITY'].dropna().unique())
     selected_locality = st.sidebar.selectbox("Select Neighborhood / Borough:", ["All New York"] + list(available_localities))
 
-    # Control 2: Multi-select Filter for Property Structure Types
+    # Control 2: Property Structure Types Filter
     property_types = sorted(df['TYPE'].unique())
     selected_types = st.sidebar.multiselect("Property Type:", property_types, default=property_types)
 
@@ -82,8 +82,15 @@ try:
         working_df = working_df[working_df['SUBLOCALITY'] == selected_locality]
 
     # Control 3: Dynamic Price Range Slider
-    min_price = int(working_df['PRICE'].min()) if not working_df.empty else 0
-    max_price = int(working_df['PRICE'].max()) if not working_df.empty else 10000000
+    if not working_df.empty:
+        min_price = int(working_df['PRICE'].min())
+        max_price = int(working_df['PRICE'].max())
+    else:
+        min_price, max_price = 0, 10000000
+
+    # Safety check to prevent slider crash if min == max
+    if min_price == max_price:
+        max_price += 1
 
     selected_budget = st.sidebar.slider(
         "Set Purchase Budget Range ($):", 
@@ -104,7 +111,6 @@ try:
 
     col1, col2, col3 = st.columns(3)
     if not filtered_df.empty:
-        # Calculate localized analytical aggregates
         avg_price = filtered_df['PRICE'].mean()
         avg_size = filtered_df['PROPERTYSQFT'].mean()
         avg_cost_sqft = filtered_df['PRICE_PER_SQFT'].mean()
@@ -121,7 +127,7 @@ try:
         chart_col1, chart_col2 = st.columns(2)
 
         with chart_col1:
-            # Chart 1: Spatial Geospatial Distribution Map (FIXED HOVER DATA Syntax)
+            # Chart 1: Map
             st.subheader("📍 Spatial Price Distribution Map")
             fig_map = px.scatter_mapbox(
                 filtered_df, lat="LATITUDE", lon="LONGITUDE", color="PRICE", size="PROPERTYSQFT",
@@ -134,7 +140,7 @@ try:
             )
             st.plotly_chart(fig_map, use_container_width=True)
 
-            # Chart 2: Categorical Structural Evaluation
+            # Chart 2: Box Plot
             st.subheader("📊 Price Distribution by Property Type")
             fig_box = px.box(
                 filtered_df, x="TYPE", y="PRICE", color="TYPE", 
@@ -147,7 +153,7 @@ try:
             st.plotly_chart(fig_box, use_container_width=True)
 
         with chart_col2:
-            # Chart 3: Numerical Value Mechanics Correlation Plot
+            # Chart 3: Scatter Correlation Plot
             st.subheader("📉 Size vs Market Price Correlation")
             fig_corr = px.scatter(
                 filtered_df, x="PROPERTYSQFT", y="PRICE", color="PRICE_PER_SQFT", 
