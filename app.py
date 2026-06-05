@@ -7,17 +7,18 @@ import streamlit as st
 
 
 st.set_page_config(
-    page_title="NY Real Estate Dashboard",
+    page_title="NY Housing Market Analysis",
     page_icon="🏙️",
     layout="wide",
 )
+
 
 st.markdown(
     """
     <style>
     .stApp {
-        background: #F6F8FB;
-        color: #111827;
+        background: #F7FAFC;
+        color: #172033;
     }
 
     section[data-testid="stSidebar"] {
@@ -27,47 +28,76 @@ st.markdown(
 
     h1 {
         color: #0F766E !important;
-        font-weight: 850 !important;
+        font-weight: 900 !important;
+        letter-spacing: -0.04em;
     }
 
-    h2, h3 {
-        color: #111827 !important;
+    h2 {
+        color: #172033 !important;
+        font-weight: 800 !important;
+        margin-top: 20px;
+    }
+
+    h3 {
+        color: #334155 !important;
+        font-weight: 700 !important;
     }
 
     .hero {
-        background: linear-gradient(135deg, #E0F2FE, #DCFCE7);
-        padding: 28px;
-        border-radius: 24px;
-        border: 1px solid #D1FAE5;
-        margin-bottom: 24px;
+        background: linear-gradient(135deg, #DBEAFE 0%, #D1FAE5 100%);
+        padding: 34px;
+        border-radius: 28px;
+        border: 1px solid #BFDBFE;
+        margin-bottom: 26px;
+        box-shadow: 0 18px 45px rgba(15, 118, 110, 0.10);
     }
 
-    .hero-text {
+    .hero-subtitle {
         font-size: 18px;
-        color: #374151;
+        color: #334155;
+        max-width: 900px;
+        line-height: 1.6;
+    }
+
+    .section-card {
+        background: #FFFFFF;
+        padding: 24px;
+        border-radius: 24px;
+        border: 1px solid #E5E7EB;
+        box-shadow: 0 14px 38px rgba(15, 23, 42, 0.06);
+        margin-top: 22px;
+        margin-bottom: 26px;
+    }
+
+    .explain {
+        background: #F0F9FF;
+        border-left: 5px solid #0EA5E9;
+        padding: 14px 18px;
+        border-radius: 14px;
+        color: #334155;
+        margin-bottom: 18px;
+        font-size: 15px;
     }
 
     div[data-testid="metric-container"] {
         background: #FFFFFF;
         border: 1px solid #E5E7EB;
         padding: 18px;
-        border-radius: 18px;
-        box-shadow: 0 8px 24px rgba(15, 118, 110, 0.08);
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(15, 118, 110, 0.08);
     }
 
     div[data-testid="stMetricValue"] {
         color: #0F766E !important;
-        font-weight: 800;
+        font-weight: 900;
     }
 
-    .info-box {
-        background: #FFFFFF;
-        border: 1px solid #E5E7EB;
-        border-left: 5px solid #0EA5E9;
-        padding: 16px 18px;
-        border-radius: 14px;
-        margin-bottom: 16px;
-        color: #374151;
+    div[data-testid="stMetricLabel"] {
+        color: #475569 !important;
+    }
+
+    .stDataFrame {
+        border-radius: 18px;
     }
     </style>
     """,
@@ -126,19 +156,19 @@ def load_data(path: str) -> pd.DataFrame:
 
     df = df.dropna(
         subset=[
+            "TYPE",
             "PRICE",
             "BEDS",
             "BATH",
             "PROPERTYSQFT",
-            "LATITUDE",
-            "LONGITUDE",
-            "TYPE",
             "LOCALITY",
             "SUBLOCALITY",
+            "LATITUDE",
+            "LONGITUDE",
         ]
     ).copy()
 
-    # Automatic cleaning for strange real-world outliers
+    # Automatic cleaning. The original CSV is not changed.
     df = df[df["PRICE"].between(50_000, 50_000_000)]
     df = df[df["PROPERTYSQFT"].between(100, 20_000)]
     df = df[df["BEDS"].between(0, 20)]
@@ -165,13 +195,13 @@ if df.empty:
     st.stop()
 
 
-# Sidebar
+# SIDEBAR
 st.sidebar.title("🏙️ Filters")
-st.sidebar.caption("Adjust the real estate analysis")
+st.sidebar.caption("Control the housing market analysis")
 st.sidebar.markdown("---")
 
 localities = sorted(df["SUBLOCALITY"].dropna().unique())
-types = sorted(df["TYPE"].dropna().unique())
+property_types = sorted(df["TYPE"].dropna().unique())
 
 selected_locality = st.sidebar.selectbox(
     "Neighborhood / Borough",
@@ -180,33 +210,34 @@ selected_locality = st.sidebar.selectbox(
 
 selected_types = st.sidebar.multiselect(
     "Property Type",
-    types,
-    default=types,
+    property_types,
+    default=property_types,
 )
-
-min_price = int(df["PRICE"].min())
-max_price = int(df["PRICE"].max())
 
 selected_budget = st.sidebar.slider(
     "Budget Range ($)",
-    min_value=min_price,
-    max_value=max_price,
-    value=(min_price, max_price),
+    min_value=int(df["PRICE"].min()),
+    max_value=int(df["PRICE"].max()),
+    value=(int(df["PRICE"].min()), int(df["PRICE"].max())),
 )
 
-bedroom_range = st.sidebar.slider(
+selected_beds = st.sidebar.slider(
     "Bedrooms",
     min_value=int(df["BEDS"].min()),
     max_value=int(df["BEDS"].max()),
     value=(int(df["BEDS"].min()), int(df["BEDS"].max())),
 )
 
-bathroom_range = st.sidebar.slider(
+selected_baths = st.sidebar.slider(
     "Bathrooms",
     min_value=int(df["BATH"].min()),
     max_value=int(df["BATH"].max()),
     value=(int(df["BATH"].min()), int(df["BATH"].max())),
 )
+
+if not selected_types:
+    st.warning("Please select at least one property type.")
+    st.stop()
 
 filtered_df = df.copy()
 
@@ -216,22 +247,23 @@ if selected_locality != "All New York":
 filtered_df = filtered_df[
     filtered_df["TYPE"].isin(selected_types)
     & filtered_df["PRICE"].between(selected_budget[0], selected_budget[1])
-    & filtered_df["BEDS"].between(bedroom_range[0], bedroom_range[1])
-    & filtered_df["BATH"].between(bathroom_range[0], bathroom_range[1])
+    & filtered_df["BEDS"].between(selected_beds[0], selected_beds[1])
+    & filtered_df["BATH"].between(selected_baths[0], selected_baths[1])
 ].copy()
 
 if filtered_df.empty:
-    st.warning("No properties match your filters. Try changing the sidebar filters.")
+    st.warning("No properties match the selected filters.")
     st.stop()
 
 
-# Header
+# HERO
 st.markdown(
     """
     <div class="hero">
-        <h1>NY Real Estate Analytics Dashboard</h1>
-        <div class="hero-text">
-            Explore how location, property size, bedrooms, bathrooms, and property type affect housing prices in New York.
+        <h1>🏙️ NY Housing Market Analysis</h1>
+        <div class="hero-subtitle">
+            This dashboard explores how location, property size, bedrooms, bathrooms,
+            and property type shape real estate prices in New York.
         </div>
     </div>
     """,
@@ -239,327 +271,247 @@ st.markdown(
 )
 
 
-# Metrics
-col1, col2, col3, col4, col5 = st.columns(5)
+# KPI CARDS
+kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
 
-col1.metric("Properties", f"{len(filtered_df):,}")
-col2.metric("Average Price", f"${filtered_df['PRICE'].mean():,.0f}")
-col3.metric("Median Price", f"${filtered_df['PRICE'].median():,.0f}")
-col4.metric("Average Size", f"{filtered_df['PROPERTYSQFT'].mean():,.0f} sqft")
-col5.metric("Avg $ / sqft", f"${filtered_df['PRICE_PER_SQFT'].mean():,.0f}")
+kpi1.metric("Properties", f"{len(filtered_df):,}")
+kpi2.metric("Average Price", f"${filtered_df['PRICE'].mean():,.0f}")
+kpi3.metric("Median Price", f"${filtered_df['PRICE'].median():,.0f}")
+kpi4.metric("Average Size", f"{filtered_df['PROPERTYSQFT'].mean():,.0f} sqft")
+kpi5.metric("Avg $ / sqft", f"${filtered_df['PRICE_PER_SQFT'].mean():,.0f}")
 
 
-tab_overview, tab_map, tab_analysis, tab_data = st.tabs(
-    ["📌 Overview", "🗺️ Map", "📊 Analysis", "📋 Data"]
+# MAP
+st.markdown('<div class="section-card">', unsafe_allow_html=True)
+st.header("📍 Where are expensive properties?")
+st.markdown(
+    """
+    <div class="explain">
+        Each point represents one property. Color shows price, and point size shows square footage.
+        This helps identify where high-value properties are concentrated.
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
+fig_map = px.scatter_mapbox(
+    filtered_df,
+    lat="LATITUDE",
+    lon="LONGITUDE",
+    color="PRICE",
+    size="PROPERTYSQFT",
+    size_max=16,
+    color_continuous_scale="Viridis",
+    zoom=9,
+    center={
+        "lat": filtered_df["LATITUDE"].mean(),
+        "lon": filtered_df["LONGITUDE"].mean(),
+    },
+    hover_name="ADDRESS",
+    hover_data={
+        "PRICE": ":,.0f",
+        "PROPERTYSQFT": ":,.0f",
+        "PRICE_PER_SQFT": ":,.0f",
+        "TYPE": True,
+        "BEDS": True,
+        "BATH": True,
+        "SUBLOCALITY": True,
+        "LATITUDE": False,
+        "LONGITUDE": False,
+    },
+)
 
-with tab_overview:
-    st.markdown(
-        """
-        <div class="info-box">
-        <b>What this page shows:</b> a quick summary of the filtered real estate market.
-        It helps answer: which neighborhoods and property types are most expensive?
-        </div>
-        """,
-        unsafe_allow_html=True,
+fig_map.update_layout(
+    mapbox_style="open-street-map",
+    height=650,
+    margin=dict(r=0, t=0, l=0, b=0),
+)
+
+st.plotly_chart(fig_map, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+
+# SCATTER
+st.markdown('<div class="section-card">', unsafe_allow_html=True)
+st.header("📈 What drives price?")
+st.markdown(
+    """
+    <div class="explain">
+        This chart compares property size and market price. It supports the PRD goal
+        of showing how square footage contributes to final market value.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+fig_scatter = px.scatter(
+    filtered_df,
+    x="PROPERTYSQFT",
+    y="PRICE",
+    color="PRICE_PER_SQFT",
+    size="BEDS",
+    color_continuous_scale="Teal",
+    hover_name="ADDRESS",
+    hover_data={
+        "TYPE": True,
+        "SUBLOCALITY": True,
+        "BEDS": True,
+        "BATH": True,
+        "PRICE_PER_SQFT": ":,.0f",
+    },
+    labels={
+        "PROPERTYSQFT": "Property Size (sqft)",
+        "PRICE": "Market Price ($)",
+        "PRICE_PER_SQFT": "$ per sqft",
+    },
+)
+
+fig_scatter.update_layout(
+    height=600,
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+)
+
+st.plotly_chart(fig_scatter, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+
+# NEIGHBORHOODS
+st.markdown('<div class="section-card">', unsafe_allow_html=True)
+st.header("🏘️ Which neighborhoods are most expensive?")
+st.markdown(
+    """
+    <div class="explain">
+        This comparison ranks neighborhoods by average property price using the filtered data.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+neighborhood_summary = (
+    filtered_df.groupby("SUBLOCALITY", as_index=False)
+    .agg(
+        AVG_PRICE=("PRICE", "mean"),
+        LISTINGS=("PRICE", "count"),
     )
+    .sort_values("AVG_PRICE", ascending=False)
+    .head(15)
+)
 
-    left, right = st.columns(2)
+fig_neighborhoods = px.bar(
+    neighborhood_summary,
+    x="AVG_PRICE",
+    y="SUBLOCALITY",
+    orientation="h",
+    color="AVG_PRICE",
+    color_continuous_scale="Teal",
+    text="LISTINGS",
+    labels={
+        "AVG_PRICE": "Average Price ($)",
+        "SUBLOCALITY": "Neighborhood / Borough",
+        "LISTINGS": "Listings",
+    },
+)
 
-    with left:
-        neighborhood_summary = (
-            filtered_df.groupby("SUBLOCALITY", as_index=False)
-            .agg(
-                AVG_PRICE=("PRICE", "mean"),
-                LISTINGS=("PRICE", "count"),
-            )
-            .sort_values("AVG_PRICE", ascending=False)
-            .head(10)
-        )
+fig_neighborhoods.update_layout(
+    height=580,
+    yaxis=dict(autorange="reversed"),
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+)
 
-        fig_neighborhoods = px.bar(
-            neighborhood_summary,
-            x="AVG_PRICE",
-            y="SUBLOCALITY",
-            orientation="h",
-            text="LISTINGS",
-            color="AVG_PRICE",
-            color_continuous_scale="Teal",
-            labels={
-                "AVG_PRICE": "Average Price ($)",
-                "SUBLOCALITY": "Neighborhood",
-                "LISTINGS": "Listings",
-            },
-            title="Top 10 Neighborhoods by Average Price",
-        )
-
-        fig_neighborhoods.update_layout(
-            yaxis=dict(autorange="reversed"),
-            height=520,
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-        )
-
-        st.plotly_chart(fig_neighborhoods, use_container_width=True)
-
-    with right:
-        type_summary = (
-            filtered_df.groupby("TYPE", as_index=False)
-            .agg(
-                AVG_PRICE=("PRICE", "mean"),
-                LISTINGS=("PRICE", "count"),
-            )
-            .sort_values("AVG_PRICE", ascending=False)
-        )
-
-        fig_types = px.bar(
-            type_summary,
-            x="TYPE",
-            y="AVG_PRICE",
-            color="AVG_PRICE",
-            color_continuous_scale="Blues",
-            text="LISTINGS",
-            labels={
-                "TYPE": "Property Type",
-                "AVG_PRICE": "Average Price ($)",
-                "LISTINGS": "Listings",
-            },
-            title="Average Price by Property Type",
-        )
-
-        fig_types.update_layout(
-            height=520,
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-            xaxis_tickangle=-35,
-        )
-
-        st.plotly_chart(fig_types, use_container_width=True)
+st.plotly_chart(fig_neighborhoods, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 
-with tab_map:
-    st.markdown(
-        """
-        <div class="info-box">
-        <b>What this map shows:</b> each point is a property. 
-        Color shows price, and point size shows property square footage.
-        </div>
-        """,
-        unsafe_allow_html=True,
+# PROPERTY TYPES
+st.markdown('<div class="section-card">', unsafe_allow_html=True)
+st.header("🏠 Which property types cost more?")
+st.markdown(
+    """
+    <div class="explain">
+        This chart compares average prices across property types, such as houses, condos, and co-ops.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+type_summary = (
+    filtered_df.groupby("TYPE", as_index=False)
+    .agg(
+        AVG_PRICE=("PRICE", "mean"),
+        LISTINGS=("PRICE", "count"),
     )
+    .sort_values("AVG_PRICE", ascending=False)
+)
 
-    fig_map = px.scatter_mapbox(
-        filtered_df,
-        lat="LATITUDE",
-        lon="LONGITUDE",
-        color="PRICE",
-        size="PROPERTYSQFT",
-        size_max=15,
-        color_continuous_scale="Viridis",
-        zoom=9,
-        center={
-            "lat": filtered_df["LATITUDE"].mean(),
-            "lon": filtered_df["LONGITUDE"].mean(),
-        },
-        hover_name="ADDRESS",
-        hover_data={
-            "PRICE": ":,.0f",
-            "PROPERTYSQFT": ":,.0f",
-            "PRICE_PER_SQFT": ":,.0f",
-            "BEDS": True,
-            "BATH": True,
-            "TYPE": True,
-            "SUBLOCALITY": True,
-            "LATITUDE": False,
-            "LONGITUDE": False,
-        },
-        title="Spatial Distribution of Property Prices",
-    )
+fig_types = px.bar(
+    type_summary,
+    x="TYPE",
+    y="AVG_PRICE",
+    color="AVG_PRICE",
+    color_continuous_scale="Blues",
+    text="LISTINGS",
+    labels={
+        "TYPE": "Property Type",
+        "AVG_PRICE": "Average Price ($)",
+        "LISTINGS": "Listings",
+    },
+)
 
-    fig_map.update_layout(
-        mapbox_style="open-street-map",
-        height=680,
-        margin=dict(r=0, t=40, l=0, b=0),
-    )
+fig_types.update_layout(
+    height=560,
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    xaxis_tickangle=-35,
+)
 
-    st.plotly_chart(fig_map, use_container_width=True)
+st.plotly_chart(fig_types, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 
-with tab_analysis:
-    st.markdown(
-        """
-        <div class="info-box">
-        <b>What this page shows:</b> relationships between price, size, bedrooms, bathrooms, and property type.
-        This is the main analysis section.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+# DATASET
+st.markdown('<div class="section-card">', unsafe_allow_html=True)
+st.header("📋 Dataset")
+st.markdown(
+    """
+    <div class="explain">
+        This table shows the filtered dataset used in the visualizations.
+        The CSV file is not manually edited; cleaning is applied inside the app.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-    row1_col1, row1_col2 = st.columns(2)
+display_columns = [
+    "TYPE",
+    "PRICE",
+    "BEDS",
+    "BATH",
+    "PROPERTYSQFT",
+    "PRICE_PER_SQFT",
+    "ADDRESS",
+    "LOCALITY",
+    "SUBLOCALITY",
+    "LATITUDE",
+    "LONGITUDE",
+]
 
-    with row1_col1:
-        fig_scatter = px.scatter(
-            filtered_df,
-            x="PROPERTYSQFT",
-            y="PRICE",
-            color="PRICE_PER_SQFT",
-            size="BEDS",
-            color_continuous_scale="Teal",
-            hover_name="ADDRESS",
-            hover_data={
-                "TYPE": True,
-                "SUBLOCALITY": True,
-                "BEDS": True,
-                "BATH": True,
-                "PRICE_PER_SQFT": ":,.0f",
-            },
-            labels={
-                "PROPERTYSQFT": "Property Size (sqft)",
-                "PRICE": "Price ($)",
-                "PRICE_PER_SQFT": "$ per sqft",
-            },
-            title="Property Size vs Market Price",
-        )
+display_columns = [col for col in display_columns if col in filtered_df.columns]
 
-        fig_scatter.update_layout(
-            height=540,
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-        )
+st.dataframe(
+    filtered_df[display_columns],
+    use_container_width=True,
+    height=520,
+)
 
-        st.plotly_chart(fig_scatter, use_container_width=True)
+csv_export = filtered_df[display_columns].to_csv(index=False).encode("utf-8")
 
-    with row1_col2:
-        fig_box = px.box(
-            filtered_df,
-            x="TYPE",
-            y="PRICE",
-            color="TYPE",
-            color_discrete_sequence=px.colors.qualitative.Set2,
-            labels={
-                "TYPE": "Property Type",
-                "PRICE": "Price ($)",
-            },
-            title="Price Distribution by Property Type",
-        )
+st.download_button(
+    "⬇️ Download filtered dataset",
+    data=csv_export,
+    file_name="filtered_ny_housing_data.csv",
+    mime="text/csv",
+)
 
-        fig_box.update_layout(
-            height=540,
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-            showlegend=False,
-            xaxis_tickangle=-35,
-        )
-
-        st.plotly_chart(fig_box, use_container_width=True)
-
-    row2_col1, row2_col2 = st.columns(2)
-
-    with row2_col1:
-        bedroom_summary = (
-            filtered_df.groupby("BEDS", as_index=False)
-            .agg(
-                AVG_PRICE=("PRICE", "mean"),
-                LISTINGS=("PRICE", "count"),
-            )
-            .sort_values("BEDS")
-        )
-
-        fig_beds = px.line(
-            bedroom_summary,
-            x="BEDS",
-            y="AVG_PRICE",
-            markers=True,
-            text="LISTINGS",
-            labels={
-                "BEDS": "Bedrooms",
-                "AVG_PRICE": "Average Price ($)",
-                "LISTINGS": "Listings",
-            },
-            title="Average Price by Number of Bedrooms",
-        )
-
-        fig_beds.update_layout(
-            height=480,
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-        )
-
-        st.plotly_chart(fig_beds, use_container_width=True)
-
-    with row2_col2:
-        bathroom_summary = (
-            filtered_df.groupby("BATH", as_index=False)
-            .agg(
-                AVG_PRICE=("PRICE", "mean"),
-                LISTINGS=("PRICE", "count"),
-            )
-            .sort_values("BATH")
-        )
-
-        fig_baths = px.line(
-            bathroom_summary,
-            x="BATH",
-            y="AVG_PRICE",
-            markers=True,
-            text="LISTINGS",
-            labels={
-                "BATH": "Bathrooms",
-                "AVG_PRICE": "Average Price ($)",
-                "LISTINGS": "Listings",
-            },
-            title="Average Price by Number of Bathrooms",
-        )
-
-        fig_baths.update_layout(
-            height=480,
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-        )
-
-        st.plotly_chart(fig_baths, use_container_width=True)
-
-
-with tab_data:
-    st.markdown(
-        """
-        <div class="info-box">
-        <b>What this table shows:</b> the filtered dataset used to build the charts above.
-        The original CSV is not manually edited; cleaning happens automatically in the app.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    display_columns = [
-        "TYPE",
-        "PRICE",
-        "BEDS",
-        "BATH",
-        "PROPERTYSQFT",
-        "PRICE_PER_SQFT",
-        "ADDRESS",
-        "LOCALITY",
-        "SUBLOCALITY",
-        "LATITUDE",
-        "LONGITUDE",
-    ]
-
-    display_columns = [col for col in display_columns if col in filtered_df.columns]
-
-    st.dataframe(
-        filtered_df[display_columns],
-        use_container_width=True,
-        height=620,
-    )
-
-    csv_export = filtered_df[display_columns].to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        "⬇️ Download filtered data",
-        data=csv_export,
-        file_name="filtered_ny_real_estate.csv",
-        mime="text/csv",
-    )
+st.markdown("</div>", unsafe_allow_html=True)
